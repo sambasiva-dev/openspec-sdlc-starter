@@ -48,6 +48,36 @@ Then, in the repository:
 
 For an existing codebase, use `--bootstrap brownfield` and paste `openspec/bootstrap/brownfield.md` instead.
 
+## Build features with the workflow
+
+Once the bootstrap has finished and Claude Code has restarted, use these commands in Claude Code:
+
+- `/opsx:explore`: think through an idea and investigate the code before you commit to a change. It writes nothing.
+- `/opsx:ff`: fast-forward. It creates the change and generates every artifact it needs in one go.
+- `/opsx:new` and `/opsx:continue`: step through the artifacts one at a time, if you want to review each one.
+- `/opsx:apply`: implement the change's tasks.
+- `/opsx:verify`: check the implementation against the artifacts before archiving.
+- `/opsx:archive`: finish the change and archive it.
+
+### Skipping artifacts
+
+- **Specs:** add `skip_specs: true` to the change's `.openspec.yaml` only when the change alters no observable behavior.
+- **Other artifacts** (`e2e-test`, `performance-test`, `business-specification`, `system-architecture`): in the proposal's Artifact Plan table, mark the artifact `Exclude` and give a one-line reason. The workflow then writes no file for it. When unsure, mark `Include`.
+
+### How the workflow works
+
+Each change moves through these stages:
+
+1. **Plan:** `proposal` (what and why), then `specs` (observable behavior), `design`, `test-plan` and `tasks`.
+2. **Apply:** implement the tasks, running the tests after each one.
+3. **Test and document:** `e2e-test`, `performance-test`, `business-specification` and `system-architecture`. These are optional per change. Each one also updates a project-wide file, so the project's behavior, architecture and test history stay current.
+4. **Review and cost:** `final-code-review` checks the change before archive. `cost-report` summarizes the cost of the work.
+5. **Archive:** the finished change is closed and its specs are merged into the project's main specs.
+
+For a walkthrough of the workflow with examples, read [How the OpenSpec SDLC workflow works](https://www.sambasiva.dev/blog/openspec-sdlc-workflow/).
+
+For the artifact dependencies, the templates and the cost tool, see the [schema README](https://github.com/sambasiva-dev/openspec-sdlc-starter/blob/master/openspec/schemas/sdlc-workflow/README.md).
+
 ## Options
 
 | Option | Meaning |

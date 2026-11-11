@@ -1,6 +1,6 @@
 {
   "name": "openspec-sdlc-starter",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Install the OpenSpec sdlc-workflow schema, Claude Code agent bindings and bootstrap prompts into a repository.",
   "keywords": [
     "openspec",
