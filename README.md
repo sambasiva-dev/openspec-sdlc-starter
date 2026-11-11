@@ -3,11 +3,41 @@
 Installs the OpenSpec `sdlc-workflow` schema, Claude Code agent bindings and bootstrap prompts into a
 repository, so the bootstrap can configure the project.
 
-## Use
+## Prerequisites
+
+Install these before you use the package:
+
+1. **Node.js 20+** and npm.
+2. **Claude Code**, the CLI agent this package installs bindings for:
+   ```sh
+   npm install -g @anthropic-ai/claude-code
+   ```
+   See the [Claude Code docs](https://docs.claude.com/en/docs/claude-code/overview) for other install methods.
+3. **OpenSpec CLI** (`openspec`) on your PATH:
+   ```sh
+   npm install -g @fission-ai/openspec
+   openspec --version
+   ```
+4. **OpenSpec initialized in the repository.** Run this in the repo root before the installer:
+   ```sh
+   cd /path/to/your-repo
+   openspec init --tools claude
+   ```
+   `openspec init` creates the `openspec/` folder and the default Claude Code bindings. The installer skips any file
+   that already exists, so if you want this package's versions of the `.claude/` files, re-run the installer with
+   `--overwrite` (see Options). Project ledgers are never replaced.
+## Install
 
 ```sh
-npm install openspec-sdlc-starter
-npx openspec-sdlc-starter --agent claude --bootstrap greenfield
+npm install -g openspec-sdlc-starter
+cd /path/to/your-repo
+openspec-sdlc-starter --agent claude --bootstrap greenfield
+```
+
+To avoid a global install, run it with `npx`:
+
+```sh
+npx openspec-sdlc-starter@0.1.0 --agent claude --bootstrap greenfield
 ```
 
 Then, in the repository:
@@ -16,7 +46,7 @@ Then, in the repository:
    (`openspec/bootstrap/greenfield.md`). It interviews you, then writes `openspec/config.yaml`.
 2. Restart Claude Code. Agent bindings register at session start.
 
-Requires Node 20+ and the OpenSpec CLI (`openspec`) on your PATH.
+For an existing codebase, use `--bootstrap brownfield` and paste `openspec/bootstrap/brownfield.md` instead.
 
 ## Options
 

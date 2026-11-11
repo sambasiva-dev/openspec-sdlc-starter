@@ -1,8 +1,11 @@
-name: Publish openspec-sdlc-starter to GitHub Packages
+name: Publish openspec-sdlc-starter to npm
 
 # Publishes on a version tag (v0.1.0, v0.2.0, ...) or on demand.
 # The package lives in sdlc-installer/. Its payload is built from the sources in this repository root,
 # so this workflow must stay at the repository root.
+#
+# Requires the repository secret NPM_TOKEN (an npmjs.com granular access token with read and write
+# permission on packages, and 2FA bypass for CI).
 
 on:
   push:
@@ -12,7 +15,7 @@ on:
 
 permissions:
   contents: read
-  packages: write
+  id-token: write   # npm provenance attestation
 
 jobs:
   publish:
@@ -25,12 +28,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js with the GitHub Packages registry
+      - name: Set up Node.js with the npm registry
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          registry-url: https://npm.pkg.github.com
-          scope: '@${{ github.repository_owner }}'
+          registry-url: https://registry.npmjs.org
 
       - name: Check that the tag matches package.json
         if: startsWith(github.ref, 'refs/tags/v')
@@ -43,16 +45,6 @@ jobs:
             exit 1
           fi
 
-      - name: Scope the package name to the repository owner
-        # GitHub Packages serves only scoped npm packages (@owner/name). The owner is taken from the
-        # repository, lowercased, because npm scopes must be lowercase.
-        env:
-          OWNER: ${{ github.repository_owner }}
-        run: |
-          OWNER_LC="${OWNER,,}"
-          npm pkg set name="@${OWNER_LC}/openspec-sdlc-starter"
-          echo "Publishing $(node -p "require('./package.json').name")@$(node -p "require('./package.json').version")"
-
       - name: Check the source and run the smoke tests
         run: |
           npm run check
@@ -63,5 +55,5 @@ jobs:
 
       - name: Publish
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm publish
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --provenance
