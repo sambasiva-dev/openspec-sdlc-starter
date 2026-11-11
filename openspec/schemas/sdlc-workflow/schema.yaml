@@ -1,0 +1,555 @@
+name: sdlc-workflow
+version: 2
+description: >
+  Portable spec-driven SDLC schema: plan, implement, test, document, review. Eleven artifacts plus an apply phase,
+  across explicit approval gates; each artifact is authored by a persona subagent. Contains no project,
+  language, or domain specifics -- those live in openspec/config.yaml `context:` and in the
+  project standards file named by the apply phase.
+
+# PORTING THIS SCHEMA
+#   1. Copy openspec/schemas/sdlc-workflow/ into the target repo unchanged.
+#   2. Set `schema: sdlc-workflow` in the target's openspec/config.yaml.
+#   3. Describe the project in that config's `context:` (domain, stack, structure, test tools,
+#      doc paths) and route artifacts to personas in its `rules:`, which also carry the
+#      project's risk triggers and the post-apply batch guidance.
+#   4. Write the project's implementation standards to the path `context.standards_file` names.
+# Nothing below should need editing per project. If it does, the missing knob belongs in config.
+#
+# PERSONAS: the CLI reads persona routing from config.yaml `rules:` only. Role prompts and model
+# tiers live in .claude/agents/<name>.md. There is deliberately no agent register here.
+
+artifacts:
+  - id: proposal
+    generates: proposal.md
+    description: Why the change is needed, what changes, and its risk profile
+    template: proposal.md
+    requires: []
+    instruction: |
+      INTERVIEW FIRST. Do not draft proposal.md until the requirements interview is complete and
+      the user has confirmed the playback. A proposal drafted on guesses is the most expensive
+      defect in the pipeline: every later artifact inherits it.
+
+      The interview is recorded in `interview.md`, in the same directory as proposal.md. It is
+      the only record of the user's answers, because the author of this artifact may run in an
+      isolated context that cannot see the conversation.
+
+      HOW THE INTERVIEW RUNS -- in rounds, every open question of a round asked together:
+      1. Read `interview.md` if it exists. If you were handed answers from the user, append each
+         verbatim under its question first. Number every entry: `### Q<n>: <question>` then
+         `**A:** <answer>`.
+      2. Before asking, research what the repo already answers -- existing specs (see RESEARCH
+         EXISTING SPECS below), the living product and architecture ledgers (index first, then
+         only the component files the request touches; never docs/history/), the code. Never ask
+         the user something you can read. Note what you learned this way under `## From the repo`.
+      3. Ask every checklist gap the repo could not answer in ONE round: a numbered list, most
+         important first, at most eight questions. Each gets one line on why the answer matters
+         and, when the space is small, concrete options with your recommended one marked. Do not
+         split a round into single questions -- each round trip re-sends the whole conversation,
+         so the number of rounds, not the number of questions, is the cost. Then stop and return
+         the list -- do not continue past it.
+      4. If an answer is vague ("the usual", "standard rounding", "fast"), ask a follow-up that
+         pins it to a value; gather every follow-up into the next round, never one at a time.
+         "I don't know" is a valid answer: record it as an open question with an owner, never
+         fill it with an assumption.
+      5. When every checklist item is answered, marked not-applicable with a reason, or recorded
+         as an open question, write a `## Playback` section summarising your understanding in
+         ten lines or fewer and ask the user to confirm or correct it. That is your final
+         question. Aim for two rounds plus the playback; a third round only for answers that
+         opened a genuinely new gap.
+      6. Draft proposal.md only after the user confirms the playback. Every statement in the
+         proposal must trace to an interview answer or a `From the repo` note.
+
+      CHECKLIST -- what the interview must establish before drafting:
+      - Problem: what is broken or missing today, who feels it, and why now.
+      - Actors and triggers: who or what starts the behaviour -- an API caller, a message,
+        an external system, a schedule -- and who consumes the result.
+      - Scope: what is in, and what is explicitly OUT of this change.
+      - Business rules: the data involved, required fields, state transitions, and for anything
+        involving money -- currency, rounding, tax, and which amounts are calculated vs. supplied.
+      - Failure and edge cases: invalid input, duplicates and retries (idempotency), partial
+        failure across steps, downstream system unavailable.
+      - Integration: systems touched (external systems, message topics, other components) and whether any
+        contract they rely on changes -- that is what makes a change BREAKING.
+      - Non-functional: expected volume and latency, auditability, security or data sensitivity.
+      - Acceptance: how the user will know it works -- concrete, checkable outcomes.
+      - Risk triggers: which of the risk triggers in your rules this change hits. That decides
+        the Artifact Plan and the Review Depth, so it must be asked, not inferred.
+
+      Then draft. Establish WHY this change is needed. Keep it to 1-2 pages; the "how" belongs in design.md.
+      Sections:
+      - **Why**: 1-2 sentences on the problem or opportunity.
+      - **What Changes**: Specific new capabilities, modifications, removals. Mark breaking
+        changes **BREAKING**.
+      - **Capabilities**: the contract between this artifact and the specs phase.
+        - **New Capabilities**: each becomes `specs/<capability-path>/spec.md`. Kebab-case any
+          path segment you introduce; follow the project's existing spec organization.
+        - **Modified Capabilities**: existing capabilities whose REQUIREMENTS change -- not
+          implementation details. Use the exact existing path under `openspec/specs/`.
+      - **Impact**: affected code, APIs, dependencies, systems.
+      - **Artifact Plan**: reproduce the template's table verbatim and fill it in. It declares
+        which post-apply artifacts this change will produce. Judge each against the risk
+        triggers in your rules and against this change's actual diff surface: `Include` when a
+        trigger is plausibly hit, `Exclude` only when you can say why it cannot be. One line of
+        reason each -- an Excluded artifact writes NO file at all, so that line is the entire
+        record of the decision. Then set **Review Depth**.
+
+      `final-code-review` is not selectable; it always runs. Review Depth sets how deep it goes.
+      Write `Include` when unsure: over-producing is recoverable, a silent gap is not.
+
+      RESEARCH EXISTING SPECS FIRST -- the Capabilities section is worthless if it duplicates a
+      capability that already exists.
+      - `openspec list --specs` for the capability inventory. (`openspec list` alone lists
+        in-flight changes, not specs.)
+      - `openspec show "<spec-id>" --type spec --json --no-scenarios` for an overview of any that
+        look related. Keep `--type spec`: a change and a spec sharing a name is otherwise an
+        ambiguous-item error. Append `--store "<id>"` only for a registered standalone store.
+      - Then read each relevant spec IN FULL, scenarios included, with
+        `openspec show "<spec-id>" --type spec`, before deciding what is already covered.
+      Reuse an existing capability's exact path rather than introducing a near-duplicate.
+
+      Every change must declare at least one capability or opt out: `openspec validate` rejects a
+      zero-delta change unless its `.openspec.yaml` sets `skip_specs: true`. Use that only when no
+      spec-level behavior changes (pure refactor, tooling, docs). Never invent a requirement to
+      satisfy validation.
+
+  - id: specs
+    generates: specs/**/*.md
+    description: Behavior contracts -- requirements and testable scenarios
+    template: specs/spec.md
+    requires: [ proposal ]
+    instruction: |
+      Define WHAT the system does. A spec is a behavior contract, not an implementation plan.
+
+      Include: observable behavior callers rely on; inputs, outputs, error conditions; external
+      constraints (security, privacy, reliability, compatibility); scenarios that can be tested.
+      Exclude: internal class or function names, library and framework choices, step-by-step
+      implementation, execution plans. Test: if the implementation can change without changing
+      externally visible behavior, it does not belong here.
+
+      ONE FILE PER CAPABILITY listed in the proposal, at `specs/<capability-path>/spec.md`,
+      preserving the full path.
+      - New: the exact path from the proposal. Do not add a domain level if the project is flat.
+      - Modified: the exact existing path under `openspec/specs/`. Confirm it with
+        `openspec list --specs` before writing -- a mistyped path silently targets a capability
+        that does not exist. Never move or rename the capability.
+      At least one spec file is required unless `.openspec.yaml` sets `skip_specs: true`. If the
+      proposal lists no capabilities and that flag is unset, revisit the proposal first.
+
+      Delta operations, as `##` headers:
+      - **ADDED Requirements**
+      - **MODIFIED Requirements** -- MUST carry the full updated content
+      - **REMOVED Requirements** -- MUST include **Reason** and **Migration**
+      - **RENAMED Requirements** -- FROM:/TO: format
+
+      Format:
+      - `### Requirement: <name>`, then the requirement text. Use SHALL/MUST, not should/may.
+      - `#### Scenario: <name>` with WHEN/THEN bullets.
+      - **CRITICAL**: scenarios need exactly four hashtags. Three, or a bullet, fails SILENTLY.
+      - Every requirement needs at least one scenario.
+
+      `## Purpose` -- NEW capabilities only, as the first section: one or two sentences, 50+
+      characters (`openspec validate --strict` flags shorter). Archive copies it into the main
+      spec; without it the new spec carries a `TBD` placeholder. Do NOT add Purpose to a delta for
+      an existing capability -- it is ignored. To change an existing Purpose, including a leftover
+      TBD, edit `<planningHome.root>/openspec/specs/<capability-path>/spec.md` directly.
+      `planningHome.root` comes from the `openspec instructions ... --json` response; always use
+      it rather than a repo-relative path, since it already resolves to a store when one applies.
+
+      MODIFIED workflow: locate the requirement in that same store-aware path, copy the ENTIRE
+      block from `### Requirement:` through all scenarios, paste under `## MODIFIED Requirements`,
+      then edit. Header text must match exactly (whitespace-insensitive). Partial content LOSES
+      detail at archive time -- if you are adding a concern rather than changing existing
+      behavior, use ADDED.
+
+      Example:
+      ```
+      # Spec Delta
+
+      ## Purpose
+
+      Lets users take their data out of the product in a portable format.
+
+      ## ADDED Requirements
+
+      ### Requirement: User can export data
+      The system SHALL allow users to export their data in CSV format.
+
+      #### Scenario: Successful export
+      - **WHEN** user clicks "Export"
+      - **THEN** system downloads a CSV file containing all user data
+
+      ## REMOVED Requirements
+
+      ### Requirement: Legacy export
+      **Reason**: Replaced by new export system
+      **Migration**: Use the /api/v2/export endpoint
+      ```
+
+      TEST CONTRACT: each scenario maps 1:1 to a named test in test-plan.md. Write only scenarios
+      you would assert in code -- a concrete value, state, or error, never "works correctly".
+
+      NON-EXECUTABLE CHANGES (documentation, config, pure schema edits) MAY assert an equivalent
+      mechanical validation instead: "schema validates", "linter passes", "link resolves". The
+      THEN must still be checkable by some tool, never by prose approval.
+
+  - id: design
+    generates: design.md
+    description: Technical approach and the decisions behind it
+    template: design.md
+    requires: [ specs ]
+    instruction: |
+      Explain HOW to implement the change. Architecture and approach, not line-by-line code.
+
+      Write one when any apply: the change is cross-cutting, introduces an architectural pattern
+      or external dependency, alters the data model significantly, carries security, performance
+      or migration complexity, or holds ambiguity worth resolving before coding.
+
+      Sections:
+      - **Context**: only the current state and constraints needed to explain the approach.
+        Point at proposal.md for motivation rather than restating it.
+      - **Goals / Non-Goals**: design-level boundaries only, not a restatement of scope.
+      - **Decisions**: each key choice with its rationale and the alternatives considered.
+        Why X over Y is the whole value of this document.
+      - **Structure**: components touched, their interactions, and the contracts between them.
+        Use a diagram where it shows a mechanism that prose would obscure.
+      - **Data & Contracts**: schema changes, interface or endpoint signatures, payload shapes.
+      - **Risks / Trade-offs**: `[Risk] -> Mitigation`.
+      - **Migration Plan**: deploy steps and rollback strategy, if applicable.
+      - **Open Questions**: omit if none.
+
+      Open questions are for genuinely deferrable unknowns. If an answer would change the specs,
+      the approach, or the task breakdown, resolve it NOW -- ask the user rather than guessing.
+
+  - id: test-plan
+    generates: test-plan.md
+    description: Test plan -- one assertable test case per spec scenario
+    template: test-plan.md
+    requires: [ design ]
+    instruction: |
+      Define the tests that will cover the change. Tests are written alongside the code, not
+      necessarily before it; there is no red-first requirement.
+
+      Every scenario in the specs maps 1:1 to a test case here. Each case states an expected
+      outcome assertable in code -- a value, a state, or an error, never "works correctly". If a
+      scenario is not assertable, rewrite it to be concrete and mechanically checkable rather than
+      writing a vague test around it.
+
+      For each case give: the component under test, the arrange/act/assert shape, what is mocked
+      and what is real, and the setup or teardown needed to isolate it. Keep each case small
+      enough to finish in one session and order them by dependency.
+
+      Use the unit test framework and mocking library named in project context. Name tests after
+      the behavior they pin, not after the method they call.
+
+  - id: tasks
+    generates: tasks.md
+    description: Ordered implementation checklist
+    template: tasks.md
+    requires: [ test-plan ]
+    instruction: |
+      Break the work into ordered tasks.
+
+      First check design.md Open Questions. If any would change what gets built, resolve it with
+      the user -- do not bake an unstated assumption into the task list.
+
+      **CHECKBOX FORMAT IS PARSED.** The apply phase tracks progress from it. A box holding only
+      `x` counts as done, any case or spacing, so `- [ x]` is done too. EVERY other marker --
+      `- [~]`, `- [-]`, `- []` -- reads as unfinished, and a line with no checkbox is not tracked
+      at all.
+
+      - Group related tasks under `##` numbered headings.
+      - Each task is `- [ ] X.Y <description>`.
+      - One task per behaviour: implement it AND write the tests the test plan names for it, in
+        the same task. Do not split a separate "write failing test" task.
+      - Order by dependency; keep each task completable in one session.
+      - Each task states how completion is verified -- a test, a command, an observable behavior,
+        or a delivered artifact -- inside its own checkbox text. Add a separate verification task
+        only for integration behavior spanning several implementation tasks.
+
+  - id: e2e-test
+    generates: e2e-test.md
+    description: End-to-end journeys plus the runnable suite under the project's e2e directory
+    template: e2e-test.md
+    requires: [ proposal, tasks ]
+    instruction: |
+      CONDITIONAL. Read `proposal.md` first -- it is handed to you as the `proposal`
+      dependency. If its `## Artifact Plan` table marks `e2e-test` **Exclude**, write NOTHING
+      (no plan file, no suite) and report back that you skipped it and the stated reason. Otherwise continue.
+      `openspec status` will keep reporting this artifact `ready` -- the CLI cannot represent a
+      declared exclusion. `ready` is not authorization; the table is.
+
+      Author RUNNABLE end-to-end tests, using the E2E framework and directory named in project
+      context (`context.testing`, `context.paths.e2e`).
+
+      THIS ARTIFACT WRITES TWO THINGS. `generates:` can only point inside the change directory
+      (the CLI rejects absolute paths and `..`), so the change-local `.md` is the plan and the
+      e2e directory holds the executable suite. A plan with no runnable spec does not satisfy
+      this artifact.
+
+      1. `e2e-test.md` in the change directory: the journeys, environment setup, and exit
+         criteria the reviewer reads at the gate.
+      2. The suite itself, one spec file per capability, plus the framework config and dependency
+         manifest if the suite does not yet exist. EXTEND an existing suite -- add files and
+         cases, never rewrite another capability's spec.
+
+      BDD MAPPING: every test maps 1:1 to a Given/When/Then story. Name each test after its
+      journey and open its body with `// GIVEN / // WHEN / // THEN` comments matching the story in
+      `e2e-test.md`. A test with no story, or a story with no test, is a review-blocking gap.
+
+      Rules:
+      - These run against a DEPLOYED instance over a real socket. That is the point of this layer:
+        it catches what an in-process harness structurally cannot -- a port not exposed, a reverted
+        host binding, a missing route registration. Do not reimplement unit assertions here.
+      - Read the target from the environment (`BASE_URL` or the project's equivalent). NEVER
+        hardcode a host, port, token, or environment name.
+      - For API-only journeys use the framework's HTTP request client. Do not launch a browser to
+        assert JSON.
+      - Assert status, headers, and body shape explicitly. Never assert only that a call succeeded.
+      - Keep journeys idempotent and side-effect-free where the capability allows. Where seeding is
+        required, script BOTH setup and teardown -- never leave residue in a shared environment.
+      - Never commit a credential. Secrets come from the environment.
+
+      If the harness cannot be installed or run in this change, say so plainly in `e2e-test.md`,
+      state how the journeys are verified meanwhile, and do not imply coverage that does not exist.
+
+
+  - id: performance-test
+    generates: performance-test.md
+    description: SLIs plus the runnable load profiles under the project's performance directory
+    template: performance-test.md
+    requires: [ proposal, tasks ]
+    instruction: |
+      CONDITIONAL. Read `proposal.md` first -- it is handed to you as the `proposal`
+      dependency. If its `## Artifact Plan` table marks `performance-test` **Exclude**, write NOTHING
+      (no plan file, no scripts) and report back that you skipped it and the stated reason. Otherwise continue.
+      `openspec status` will keep reporting this artifact `ready` -- the CLI cannot represent a
+      declared exclusion. `ready` is not authorization; the table is.
+
+      Author RUNNABLE load profiles, using the load-test tool and directory named in project
+      context (`context.testing`, `context.paths.performance`).
+
+      THIS ARTIFACT WRITES TWO THINGS, for the same reason as e2e-test. SLIs with no script to
+      measure them do not satisfy it.
+
+      1. `performance-test.md` in the change directory: the SLIs, the load profiles, the
+         measurement caveats, and a baseline results table.
+      2. The scripts themselves, one per capability, extending the existing suite when present.
+
+      Script rules:
+      - Read the target from the environment with a local default. Never hardcode a deployed host.
+      - Encode EVERY SLI as a tool-level threshold, so a breach FAILS the run instead of printing
+        a number for someone to interpret. A profile with no thresholds is not a test.
+      - Define named scenarios: smoke (1 user, ~30s), sustained (ramped, produces the baseline),
+        soak (leak detection), spike (burst tolerance).
+      - Check status, content type, AND body correctness on every iteration, not sampled. A body
+        that degrades under load reveals shared mutable state, which is exactly what this layer
+        should catch.
+
+      THRESHOLD CALIBRATION -- where these artifacts usually go wrong:
+      - Target what the code under test SHOULD ACHIEVE, not a platform-wide SLO. A 200ms P95
+        applied to an endpoint with no dependencies passes at ~20x its real cost and detects
+        nothing.
+      - For an endpoint touching no datastore, broker, or external system the error-rate threshold
+        is 0.00%, not "< 0.1%". With nothing to fail, any error is a host defect and an allowance
+        would hide it.
+      - State which SLOs apply to dependency-backed paths and do not reuse them here.
+
+      MEASUREMENT DISCIPLINE:
+      - Discard warm-up. Runtimes with JIT or tiered compilation make early requests materially
+        slower; use ramp stages or an explicit discard window.
+      - Baselines come from an optimized/release build, never a debug build or a dev-server run.
+      - Do not run the load generator on the machine under test.
+      - Record every figure with its build configuration, host spec, and whether it was measured
+        in-cluster or across an ingress. An unlabelled number is not a baseline.
+      - Leave the results table `_pending_` until a run actually happens. NEVER present a target
+        as though it were an observed result.
+
+
+  - id: business-specification
+    generates: business-specification.md
+    description: Per-change functional record, merged into the living product ledger
+    template: specification.md
+    requires: [ proposal, tasks ]
+    instruction: |
+      CONDITIONAL. Read `proposal.md` first -- it is handed to you as the `proposal`
+      dependency. If its `## Artifact Plan` table marks `business-specification` **Exclude**, write NOTHING
+      (no change-local file, and do not touch the living product ledger) and report back that you skipped it and the stated reason. Otherwise continue.
+      `openspec status` will keep reporting this artifact `ready` -- the CLI cannot represent a
+      declared exclusion. `ready` is not authorization; the table is.
+
+      Maintain the LIVING product ledger at the path in project context (`context.paths.product_doc`,
+      conventionally `docs/specification.md`).
+
+      THIS ARTIFACT WRITES TWO FILES. `generates:` can only point inside the change directory, so
+      the change-local file is the per-change record and the doc path is the living document.
+
+      1. `business-specification.md` in the change directory: what THIS change adds to the
+         product, and nothing more. This is what the reviewer reads at the gate.
+      2. Merge that record into the living ledger (path relative to the solution root, NOT the
+         change folder). The ledger is split by component: the path above is a small INDEX, and
+         `docs/spec/<component>.md` holds each component's overview, journeys, rules and feature
+         rows. Read the index, then edit only the component file(s) this change touches (`grep -n
+         "^#"` it and read a line range); never read the others. Add only what this change needs
+         -- no restating of existing content. Blend into it:
+         - Never overwrite or purge live behavior. When a change supersedes or deprecates an
+           item, MOVE it to `docs/history/specification-retired.md` and put the current behavior
+           in the live file; never leave struck-through or SUPERSEDED text in a live file.
+         - Add this change's journeys to the component's journeys section and its rules to its
+           business rules section. Rule and open-question IDs are global and stable.
+         - Update the feature status matrix row by row. A feature is marked delivered only when it
+           actually is; mark planned work as planned.
+         - Add one change-log row naming this change to `docs/history/specification-change-log.md`:
+           ONE line, under 200 characters, no lists. Detail lives in the archived proposal; the
+           row never repeats it.
+
+      Keep the living ledger ENTIRELY NON-TECHNICAL. Never name a datastore, service, endpoint,
+      table, queue, or topic in it -- describe what the business can now do. Structure belongs in
+      the architecture ledger.
+
+      State plainly what is specified-but-not-built rather than implying the whole domain is live.
+
+
+  - id: system-architecture
+    generates: system-architecture.md
+    description: Per-change structural record, merged into the living architecture ledger
+    template: design-living.md
+    requires: [ proposal, tasks ]
+    instruction: |
+      CONDITIONAL. Read `proposal.md` first -- it is handed to you as the `proposal`
+      dependency. If its `## Artifact Plan` table marks `system-architecture` **Exclude**, write NOTHING
+      (no change-local file, and do not touch the living architecture ledger) and report back that you skipped it and the stated reason. Otherwise continue.
+      `openspec status` will keep reporting this artifact `ready` -- the CLI cannot represent a
+      declared exclusion. `ready` is not authorization; the table is.
+
+      Maintain the LIVING architecture ledger at the path in project context
+      (`context.paths.architecture_doc`, conventionally `docs/design.md`).
+
+      THIS ARTIFACT WRITES TWO FILES, for the same reason as business-specification.
+
+      1. `system-architecture.md` in the change directory: the structural impact of THIS change
+         only.
+      2. Merge it into the living ledger (path relative to the solution root, NOT the change
+         folder). The ledger is split: the path above is a small INDEX (C1, C2), and
+         `docs/design/` holds `components.md` (C3 diagram), `data-model.md` (C4),
+         `<component-a>.md` and `<component-b>.md` (flow, persistence, interfaces, decisions per
+         component), `platform.md` (shared inventory and cross-cutting decisions) and
+         `telemetry.md`. Read the index, then only the file(s) this change touches (`grep -n
+         "^#"` and a line range); never read the others. Move removed or superseded inventory
+         rows to `docs/history/design-retired.md` instead of leaving them in place. Update in
+         place, essentials only:
+         - Refresh the C1/C2/C3/C4 diagrams to match the repo as it now stands. Every diagram MUST
+           be syntactically valid and actually render -- check bracket, quote, fence, and subgraph
+           balance before writing.
+         - Draw what EXISTS in code as live; draw planned components dashed and labelled PLANNED.
+           An inaccurate map is worse than no map.
+         - Keep the persistence schema, messaging, and interface inventories current, INCLUDING
+           entries this change removed.
+         - Record cross-cutting decisions (interface style, serialization, transport security,
+           auth, test harness) and which artifact decided each.
+         - APPEND scale telemetry to the non-functional section without discarding historic
+           entries. Mark unmeasured figures as targets, never as observed results.
+         - Add one change-log row naming this change and its structural impact to
+           `docs/history/design-change-log.md`: ONE line, under 200 characters, no lists. Detail
+           lives in the archived proposal.
+
+      Do not duplicate the product ledger here: that file is functional, this one is structural.
+
+
+  - id: final-code-review
+    generates: final-code-review.md
+    description: Adversarial production-readiness audit before archive
+    template: final-code-review.md
+    requires: [ proposal, tasks, e2e-test, performance-test, business-specification, system-architecture ]
+    instruction: |
+      Produce the final production-readiness review. You are the last gate before archive; an
+      isolated context is the point -- a reviewer who never watched the implementation be
+      justified cannot rationalise it.
+
+      Review the diff against tasks.md, the specs, the test artifacts, and the design artifacts.
+      Verify, do not assume: every changed hunk maps to a task; every spec scenario has a test
+      that actually asserts it; every exclusion's cited validation genuinely exists; the living
+      ledgers match what the code now does.
+
+      Grade each finding CRITICAL / MAJOR / MINOR and give each one a file:line anchor and a
+      concrete failure scenario. A finding with no reproducible consequence is noise -- drop it.
+      A violation of a MUST in the project standards file or constitution is automatically
+      CRITICAL.
+
+      ARTIFACT PLAN CONFORMANCE -- do this before writing findings. The post-apply set was
+      chosen in the proposal BEFORE the diff existed, so it can be wrong. You are the only
+      check on it.
+      1. Read the `## Artifact Plan` table in proposal.md and note Review Depth.
+      2. Your dependency list reports each post-apply artifact as done or missing. That is
+         ground truth for what was actually written. Do NOT try to read a missing one -- its
+         absence IS the datum. Do not run a CLI command to find out; you do not need one.
+      3. Compare the declared Decision against actual status, per artifact:
+         - Exclude + missing: re-test the stated reason against the diff. If the diff hits the
+           trigger the reason claimed was absent, raise MAJOR "wrongly excluded" and name the
+           hunk. Raise CRITICAL when that trigger is one your rules list as high-risk.
+         - Include + missing: MAJOR -- the declared plan was not executed.
+         - Exclude + present: MINOR -- plan and repo disagree; say which is right.
+      4. Never re-decide the plan and never author the missing artifact yourself. Report it.
+
+      DEPTH -- from the proposal's Review Depth line:
+      - `focused`: diff scope only. Hunk-to-task mapping, plan conformance, and that the
+        lower-level validation each exclusion cites genuinely exists. No broad architecture or
+        performance archaeology.
+      - `standard`: the full review above.
+      - `escalated`: the full review, run by the escalated reviewer the project's rules route
+        it to. If you are NOT that escalated reviewer, raise a blocking finding that the review
+        must be re-run on it before archive -- your review does not satisfy escalated depth.
+      If the diff hits a high-risk trigger the proposal did not anticipate, raise the depth
+      yourself and say so. The declared depth is the floor, not the ceiling.
+
+      State the verdict plainly: PASSED / ATTENTION REQUIRED / REJECTED. Never pass a change to
+      keep momentum.
+
+  - id: cost-report
+    generates: cost-report.md
+    description: Token usage, cost and active time per phase, computed from the session logs
+    template: cost-report.md
+    requires: [ final-code-review ]
+    instruction: |
+      MECHANICAL ARTIFACT. A script computes this file; no role writes it and no one edits it.
+      Run from the repository root:
+
+          python3 openspec/schemas/sdlc-workflow/tools/phase-cost.py --change "<change-name>"
+
+      It reads the Claude Code session logs for this project, attributes every model response to
+      a phase (each artifact, apply, review-fixes, archive), prices it from `tools/pricing.json`, and writes
+      `cost-report.md` into the change directory with one row per phase and a total.
+
+      - Verify the file exists afterwards and quote the Total row to the user in one line.
+      - If the script exits with an error -- no session logs, no usage attributed to this change
+        -- STOP and tell the user what it printed. NEVER write, estimate, or patch the figures
+        by hand: a cost figure nobody measured is worse than none.
+      - If the report flags unpriced models, tell the user; the fix is a row in
+        `tools/pricing.json`, then a re-run.
+      - The script can be re-run at any time and overwrites the file. Re-run it immediately
+        before archive so work done after the review is included.
+
+apply:
+  requires: [ tasks ]
+  tracks: tasks.md
+  instruction: |
+    Implement the tasks in tasks.md.
+
+    ## Project standards -- read before your first edit
+
+    Read the project implementation standards file named by `context.standards_file` (conventionally
+    `openspec/standards.md`). It governs language, logging, naming, error handling, and
+    domain-safety rules for this repo, and applies to EVERY task, in production and test code
+    alike. A task is not complete until its code meets it. If that file is missing, say so and
+    proceed on the conventions visible in the surrounding code -- do not invent house style.
+
+    ## Process -- non-negotiable
+
+    - Write each task's code and the tests the test plan names for it together. There is no
+      red-first requirement and no "Red:" evidence line. No per-step commits are required.
+    - Run the full suite after each task. Never mark a task complete on a red or skipped suite.
+    - Update the tasks.md checkbox only when the task is genuinely done and verified by the means
+      that task names.
+    - Report honestly. If a task is blocked, partially done, or verified more weakly than planned,
+      say which and why. Never tick a box to keep momentum.
+    - Change no more than the tasks require. An unrelated refactor found mid-task is a finding to
+      report, not work to fold in silently.

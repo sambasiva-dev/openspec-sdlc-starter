@@ -1,0 +1,102 @@
+schema: "sdlc-workflow"
+
+# Everything project-specific lives here. The schema under openspec/schemas/sdlc-workflow/ is
+# portable and should not need editing. `context` is returned on EVERY artifact instruction call,
+# so keep it dense -- long prose here is paid eleven times per change.
+#
+# TEMPLATE. Every value in <FILL: ...> is a placeholder. The bootstrap prompt asks for each one and
+# replaces it. After bootstrap, no "<FILL:" may remain in this file.
+context: |
+  domain: <FILL: one line, what the product does>
+  sub_systems: [ <FILL: main business components> ]
+
+  stack:
+    runtime: <FILL: language and version>
+    api: <FILL: web or API framework, or "none">
+    broker: <FILL: message broker, or "none">
+    database: <FILL: database and data-access layer, or "none">
+    resiliency: <FILL: retry and circuit-breaker tooling, or "none">
+
+  testing:
+    unit: <FILL: unit test framework, mocking library, assertion library. Isolation rule: mocks only, or real database allowed?>
+    integration: <FILL: integration test framework; what is real and what is faked, or "none">
+    e2e: <FILL: e2e tool>
+    performance: <FILL: load-test tool>
+
+  paths:
+    src: <FILL: source root>
+    unit_tests: <FILL: unit test root>
+    integration_tests: <FILL: integration test root, or "none">
+    e2e: <FILL: e2e test root>
+    performance: <FILL: performance test root>
+    product_doc: docs/specification.md      # INDEX; component files in docs/spec/
+    architecture_doc: docs/design.md        # INDEX; component files in docs/design/
+    history: docs/history/                  # change logs and retired items; never read for current behaviour
+  ledger_reading: Never read a living ledger whole. Open the index (docs/specification.md or
+    docs/design.md, both small), then only the component files the change touches. Never open
+    docs/history/. Retire superseded items to docs/history/, do not mark them in place.
+  standards_file: openspec/standards.md
+
+  structure:
+    style: <FILL: how folders are organised: by business component, by feature, or by layer>
+    layering: <FILL: allowed call direction between layers, and what each layer may not do>. Full rules: openspec/standards.md
+    projects:
+      <FILL: one line per source project: name and responsibility>
+
+  conventions:
+    - <FILL: short, checkable rules and dated rulings the team has already decided>
+
+# Per-artifact rules. READ BY THE CLI and surfaced as `rules` in
+# `openspec instructions <artifact-id> --change <name> --json`. This is what routes each artifact
+# to its persona subagent. Keys are validated against the active schema's artifact IDs.
+rules:
+  proposal:
+    - "ROLE: Author with the `product-engineer` subagent (Agent tool, subagent_type: product-engineer). Not in the main session."
+    - "RISK TRIGGERS for this repo: <FILL: the kinds of change that must force a stronger review, e.g. money, persistence schema or migrations, auth/security, external integration, production configuration, cross-repo behavior, auditability>. A change hitting one of these needs the artifact that covers it Included, and Review Depth at least `standard`. `escalated` for <FILL: which of those triggers mean escalated review>. Judge every Artifact Plan row against this list. Write `Include` when unsure: over-producing is recoverable, a silent gap is not."
+  specs:
+    - "ROLE: Author with the `product-engineer` subagent (Agent tool, subagent_type: product-engineer). Not in the main session."
+  design:
+    - "ROLE: Author with the `principal-architect` subagent (Agent tool, subagent_type: principal-architect). Not in the main session."
+  test-plan:
+    - "ROLE: Author with the `sdet-agent` subagent (Agent tool, subagent_type: sdet-agent). Not in the main session."
+    - "LAYOUT: Before naming any file path, read only the `## Structure and layering` section of `openspec/standards.md` (a line range, not the whole file)."
+  tasks:
+    - "ROLE: Author with the `tech-lead` subagent (Agent tool, subagent_type: tech-lead). Not in the main session."
+    - "LAYOUT: Before naming any file path, read only the `## Structure and layering` section of `openspec/standards.md` (a line range, not the whole file)."
+  e2e-test:
+    - "ROLE: Author with the `automation-qa` subagent (Agent tool, subagent_type: automation-qa). Not in the main session."
+  performance-test:
+    - "ROLE: Author with the `performance-engineer` subagent (Agent tool, subagent_type: performance-engineer). Not in the main session."
+    - "RUN POLICY: <FILL: where each load scenario may run. Default: smoke and sustained run locally or in a dev session; spike and soak run only in the real performance environment, on dedicated hosts with the load generator separated from the service under test.>"
+  business-specification:
+    - "ROLE: Author with the `product-engineer` subagent (Agent tool, subagent_type: product-engineer). Not in the main session."
+  system-architecture:
+    - "ROLE: Author with the `principal-architect` subagent (Agent tool, subagent_type: principal-architect). Not in the main session."
+  final-code-review:
+    - "LAYERING AUDIT: check the diff against `openspec/standards.md` -> Structure and layering. <FILL: the layering violations that are automatic CRITICAL, one per clause, each naming the layer and the forbidden call or type>. Each is a MUST violation and therefore an automatic CRITICAL."
+    - "RISK TRIGGERS for this repo: <FILL: same list as the proposal rule>. A change hitting one of these needs the artifact that covers it Included, and Review Depth at least `standard`. `escalated` for <FILL: same as the proposal rule>. Re-test every `Exclude` row against the actual diff using this list."
+    - "ROLE: Route by the proposal's Review Depth. `focused` or `standard`: author with the `senior-staff-reviewer` subagent (Agent tool, subagent_type: senior-staff-reviewer; Sonnet 5.5). `escalated`: author with the `senior-staff-reviewer-escalated` subagent (subagent_type: senior-staff-reviewer-escalated; Opus 5.5, medium effort). Both follow `openspec/roles/senior-staff-reviewer.md`. An isolated context is the point: a reviewer that never saw the implementation being justified cannot rationalise it."
+  cost-report:
+    - "ROLE: none -- mechanical. The orchestrator runs the script named in the instruction and verifies the file; it never writes or edits the figures. This is the only artifact not authored by a role."
+
+# Persona models are set in .claude/agents/<name>.md frontmatter. The six authoring roles use
+# `inherit` (the main session's model). final-code-review is pinned: Sonnet 5.5 for focused and
+# standard depth, Opus 5.5 at medium effort for escalated depth -- two bindings over one role.
+# The CLI does not read persona registers -- there is deliberately none here.
+
+# Operation guidance. READ BY THE CLI and returned by `openspec instructions apply|archive`.
+# This is the ONLY project text that survives into apply's `all_done` state: once the last task
+# is ticked the CLI REPLACES the schema's apply.instruction with a hardcoded "ready to be
+# archived" string (dist/commands/workflow/instructions.js:430-432), but spreads operationInputs
+# outside that branch (:463). The post-apply batch trigger therefore has to live here.
+operations:
+  apply:
+    guidance:
+      - "ORCHESTRATION: read `openspec/ORCHESTRATION.md` before running the post-apply batch -- it holds the persona routing, the batch algorithm and the stop condition, and is not auto-loaded."
+      - "POST-APPLY BATCH (apply operation only -- not verification): when the last task in tasks.md is ticked and apply did not pause, do NOT stop at 'ready to archive'. First author the post-apply set declared in the proposal's `## Artifact Plan`, each via its persona subagent per `rules`, in this order: e2e-test, performance-test, business-specification, system-architecture, then final-code-review, then cost-report last (run its script; no subagent). Invoke ONLY rows marked Include -- do not spawn an Excluded artifact just to have it decline, that costs a full payload for nothing. final-code-review and cost-report always run. Verify BOTH files for each write-through artifact before moving to the next."
+      - "If implementation crossed a risk trigger that the Artifact Plan excluded, pause and ask the user to amend the plan before finishing. Do not author the excluded artifact unilaterally and do not proceed silently. Record the amendment on the row as `Amended during apply: <reason>`."
+  archive:
+    guidance:
+      - "ORCHESTRATION: read `openspec/ORCHESTRATION.md` before archiving -- it is not auto-loaded."
+      - "COST REPORT: re-run `python3 openspec/schemas/sdlc-workflow/tools/phase-cost.py --change <name>` immediately before archiving so cost-report.md includes all work up to archive. If it fails, stop and show the user its output."
+      - "ARTIFACT PLAN RECONCILIATION -- run before the artifact-completeness prompt. An artifact reported not-done because the proposal's `## Artifact Plan` marks it Exclude is intentional, not incomplete: `openspec status` cannot represent a declared exclusion and reports it `ready` forever. List those informationally with their stated reasons and do NOT prompt on them. Prompt only for artifacts that are missing AND marked Include, or missing with no Artifact Plan at all -- absence of a plan is never exclusion."

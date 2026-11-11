@@ -1,0 +1,47 @@
+{
+  "name": "openspec-sdlc-starter",
+  "version": "0.1.0",
+  "description": "Install the OpenSpec sdlc-workflow schema, Claude Code agent bindings and bootstrap prompts into a repository.",
+  "keywords": [
+    "openspec",
+    "sdlc",
+    "claude",
+    "claude-code",
+    "spec-driven",
+    "scaffold"
+  ],
+  "type": "module",
+  "bin": {
+    "openspec-sdlc-starter": "bin/openspec-sdlc-starter.mjs"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "payload/",
+    "manifest.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "check": "node --check bin/openspec-sdlc-starter.mjs && node --check lib/install-core.mjs && node --check build.mjs",
+    "pretest": "node build.mjs",
+    "test": "node --test test/smoke.test.mjs",
+    "prepack": "node build.mjs",
+    "prepublishOnly": "npm run check"
+  },
+  "license": "Apache-2.0",
+  "private": false,
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "contributors": [
+    {
+      "name": "sambasiva-dev",
+      "url": "https://github.com/sambasiva-dev"
+    }
+  ]
+}

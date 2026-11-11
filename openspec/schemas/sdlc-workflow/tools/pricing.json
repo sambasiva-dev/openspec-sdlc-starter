@@ -1,0 +1,24 @@
+{
+  "as_of": "2026-11-11",
+  "source": "Anthropic first-party API list prices, USD per 1M tokens, from https://platform.claude.com/docs/en/about-claude/pricing (checked 2026-11-11). Haiku 5.5 uses its up-to-100k-token tier; prompts over 100k cost $0.50 input / $2.50 output and are not split here. Update this file when prices change; the report prints as_of so a stale table is visible.",
+  "cache_write_5m_multiplier": 1.25,
+  "cache_write_1h_multiplier": 2.0,
+  "fast_mode_multiplier": 2.0,
+  "models": {
+    "claude-fable-5-2":  { "input": 8.00,  "output": 40.00, "cache_read": 0.20 },
+    "claude-mythos-5-2": { "input": 8.00,  "output": 40.00, "cache_read": 0.20 },
+    "claude-fable-5-1":  { "input": 10.00, "output": 50.00, "cache_read": 0.25 },
+    "claude-mythos-5-1": { "input": 10.00, "output": 50.00, "cache_read": 0.25 },
+    "claude-fable-5":    { "input": 10.00, "output": 50.00, "cache_read": 1.00 },
+    "claude-opus-5-5":   { "input": 4.00,  "output": 20.00, "cache_read": 0.20 },
+    "claude-opus-5":     { "input": 5.00,  "output": 25.00, "cache_read": 0.50 },
+    "claude-opus-4-8":   { "input": 5.00,  "output": 25.00, "cache_read": 0.50 },
+    "claude-opus-4-7":   { "input": 5.00,  "output": 25.00, "cache_read": 0.50 },
+    "claude-opus-4-6":   { "input": 5.00,  "output": 25.00, "cache_read": 0.50 },
+    "claude-sonnet-5-5": { "input": 2.00,  "output": 10.00, "cache_read": 0.10 },
+    "claude-sonnet-5":   { "input": 2.00,  "output": 10.00, "cache_read": 0.20 },
+    "claude-sonnet-4-6": { "input": 3.00,  "output": 15.00, "cache_read": 0.30 },
+    "claude-haiku-5-5":  { "input": 0.10,  "output": 0.50,  "cache_read": 0.01 },
+    "claude-haiku-4-5":  { "input": 1.00,  "output": 5.00,  "cache_read": 0.10 }
+  }
+}
